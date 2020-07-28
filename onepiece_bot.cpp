@@ -28,7 +28,7 @@ namespace op {
     // data
     std::set<int_fast64_t> user_ids;
     bool lock{false};
-    int nextChapter, nextEpisode;
+    int nextChapter, nextEpisode, nextAnalysis;
 }
 
 // starting and stopping bot
@@ -137,7 +137,7 @@ bool init()
         op::log_sender->send_message(op::admin_id, "Failed to load fetcher data!");
         return false;
     }
-    f >> op::nextChapter >> op::nextEpisode;
+    f >> op::nextChapter >> op::nextEpisode >> op::nextAnalysis;
     f.close();
 
     op::log_sender->send_message(op::admin_id, "Successfully initialized bot!");
@@ -148,7 +148,7 @@ void run_bot()
 {
     while (true)
     {
-        //std::this_thread::sleep_for(std::chrono::minutes(2));
+        std::this_thread::sleep_for(std::chrono::seconds(30));
         op::op_listener->run();
         op::log_sender->send_message(op::admin_id, "Listener stopped running, trying to restart...");
     }
@@ -158,7 +158,7 @@ void run_bot()
 
 void run_fetcher()
 {
-    op::log_sender->send_message(op::admin_id, "Startet Fetcher.");
+    op::log_sender->send_message(op::admin_id, "Fetcher started.");
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::minutes(1));
