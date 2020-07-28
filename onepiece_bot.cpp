@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
-#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
@@ -36,12 +35,12 @@ namespace op {
 bool init();
 void run_bot();
 void run_fetcher();
-void stop();
 
 // bot commands
 namespace cmd{
     void start(int_fast64_t id);
     void end(int_fast64_t id);
+    void list_user();
 }
 
 namespace fetch{
@@ -56,6 +55,8 @@ int main()
     {
         std::thread bot_runner{run_bot};
         std::thread fetcher_runner{run_fetcher};
+        bot_runner.join();
+        fetcher_runner.join();
     }
     return 0;
 }
@@ -87,6 +88,8 @@ bool init()
             cmd::start(message_chat_id);
         else if(*message.text == "/end")
             cmd::end(message_chat_id);
+        else if(*message.text == "/list_user" && message_chat_id == op::admin_id)
+            cmd::list_user();
     });
 
 
@@ -97,14 +100,35 @@ bool init()
         op::log_sender->send_message(op::admin_id, "Failed to load user database!");
         return false;
     }
-
+    bool refresh_db{false};
     int_fast64_t tmp{};
     while (f >> tmp)
     {
         if(op::user_ids.insert(tmp).second == false)
+        {
             op::log_sender->send_message(op::admin_id, "Found duplicate while loading user database: " + std::to_string(tmp));
+            refresh_db = true;
+        }
     }
     f.close();
+    if(refresh_db)
+    {
+        f.open(op::user_db, std::ios::out);
+        if(!f.is_open())
+        {
+            op::log_sender->send_message(op::admin_id, "Reinitializing Database failed!");
+        }
+        op::log_sender->send_message(op::admin_id, "Reinitializing Database...");
+        for(auto i : op::user_ids)
+        {
+            f << i;
+            f << ' ';
+        }
+        f.close();
+        op::log_sender->send_message(op::admin_id, "finished!");
+
+    }
+    
 
     /* read fetcher data */
     f.open(op::fetcher_data, std::ios::in);
@@ -134,6 +158,7 @@ void run_bot()
 
 void run_fetcher()
 {
+    op::log_sender->send_message(op::admin_id, "Startet Fetcher.");
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::minutes(1));
@@ -141,7 +166,7 @@ void run_fetcher()
         {
             fetch::notify("https://onepiece-tube.com/kapitel/" + std::to_string(op::nextChapter) + "/1");
             std::fstream f;
-            f.open("data.txt", std::ios::out);
+            f.open(op::fetcher_data, std::ios::out);
             f << ++op::nextChapter << ' ' << op::nextEpisode;
             f.close();
         }
@@ -150,7 +175,7 @@ void run_fetcher()
         {
             fetch::notify("https://onepiece-tube.com/folge/" + std::to_string(op::nextEpisode));
             std::fstream f;
-            f.open("data.txt", std::ios::out);
+            f.open(op::fetcher_data, std::ios::out);
             f << op::nextChapter << ' ' << ++op::nextEpisode;
             f.close();
         }
@@ -166,7 +191,6 @@ void cmd::start(int_fast64_t id)
     op::lock = true;
     if(op::user_ids.insert(id).second == true)
     {
-        op::lock = false;
         std::fstream f{};
         f.open(op::user_db, std::ios::app);
         if(!f.is_open())
@@ -178,6 +202,7 @@ void cmd::start(int_fast64_t id)
         f.close();
         op::op_sender->send_message(id, "Welcome to the OnePieceNotifyBot.\nSee /help for more info.");
     }
+    op::lock = false;
 }
 
 void cmd::end(int_fast64_t id)
@@ -199,6 +224,15 @@ void cmd::end(int_fast64_t id)
     }
     
         
+}
+
+void cmd::list_user()
+{
+    while(op::lock);
+    op::lock = true;
+    for(auto i : op::user_ids)
+        op::log_sender->send_message(op::admin_id, std::to_string(i));
+    op::lock = false;
 }
 
 bool fetch::check_for(const std::string& search, const std::string& url)
