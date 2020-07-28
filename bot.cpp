@@ -1,4 +1,4 @@
-// g++ -o t main.cpp -I ~/programming/cpp/onepiece_bot/include/ -std=c++17 -pthread -lcrypto -lssl
+// g++ -o bot bot.cpp -I ~/programming/cpp/libs/libtelegram/include -std=c++17 -pthread -lcrypto -lssl
 
 #define TELEGRAM_NO_LISTENER_FCGI
 #include <algorithm>
@@ -29,7 +29,7 @@ auto main()->int {
 
   
 
-  std::string const token("942517226:AAFCBFzO06ItnNDntK3KFGsi9HfDqp8t3Yk");
+  std::string const token("xxx");
 
   telegram::sender sender(token);                                               
   telegram::listener::poll listener(sender); 

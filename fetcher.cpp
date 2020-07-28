@@ -25,8 +25,8 @@ bool newEpisode(int nextNumber){
 
 
 int main(){
-    int_fast64_t admin_id {259622761};
-    std::string const token("942517226:AAFCBFzO06ItnNDntK3KFGsi9HfDqp8t3Yk");
+    int_fast64_t admin_id {};
+    std::string const token("xxx");
     telegram::sender sender(token);
 
     
