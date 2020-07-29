@@ -33,6 +33,7 @@ namespace op {
 
 // starting and stopping bot
 bool init();
+void init_callback();
 void run_bot();
 void run_fetcher();
 
@@ -40,7 +41,11 @@ void run_fetcher();
 namespace cmd{
     void start(int_fast64_t id);
     void end(int_fast64_t id);
+    void help(int_fast64_t id);
+    void resources(int_fast64_t id);
+    //admin
     void list_user();
+    void announce(const telegram::types::message& message, std::string& full_message);
 }
 
 namespace fetch{
@@ -80,17 +85,7 @@ bool init()
     op::op_sender = new telegram::sender{op_bot_token};
     op::op_listener = new telegram::listener::poll{*op::op_sender};
     op::log_sender = new telegram::sender{log_bot_token};
-    op::op_listener->set_callback_message([](telegram::types::message const & message){
-        if(!message.text)
-            return;
-        auto message_chat_id = message.chat.id;
-        if(*message.text == "/start")
-            cmd::start(message_chat_id);
-        else if(*message.text == "/end")
-            cmd::end(message_chat_id);
-        else if(*message.text == "/list_user" && message_chat_id == op::admin_id)
-            cmd::list_user();
-    });
+    init_callback();
 
 
     /* init user database */
@@ -104,6 +99,17 @@ bool init()
     int_fast64_t tmp{};
     while (f >> tmp)
     {
+        if(tmp == -1)
+        {
+            f >> tmp;
+            auto found{op::user_ids.find(tmp)};
+            if(found != op::user_ids.end())
+            {
+                op::user_ids.erase(found);
+            }
+            op::log_sender->send_message(op::admin_id, "Found id to be deleted: " + std::to_string(tmp));
+            refresh_db = true;
+        }
         if(op::user_ids.insert(tmp).second == false)
         {
             op::log_sender->send_message(op::admin_id, "Found duplicate while loading user database: " + std::to_string(tmp));
@@ -142,6 +148,40 @@ bool init()
 
     op::log_sender->send_message(op::admin_id, "Successfully initialized bot!");
     return true;
+}
+
+void init_callback()
+{
+    op::op_listener->set_callback_message([](telegram::types::message const & message){
+        if(!message.text)
+            return;
+
+        auto message_chat_id = message.chat.id;
+
+        // standard commands
+        if(*message.text == "/start")
+            cmd::start(message_chat_id);
+
+        else if(*message.text == "/end")
+            cmd::end(message_chat_id);
+
+        else if(*message.text == "/help")
+            cmd::help(message_chat_id);
+
+        else if(*message.text == "/resources")
+            cmd::resources(message_chat_id);
+
+        // admin commands
+        else if(*message.text == "/list_user" && message_chat_id == op::admin_id)
+            cmd::list_user();
+
+        else if(std::string str = *message.text; str.find("/announce") != std::string::npos && message_chat_id == op::admin_id)
+        {
+            cmd::announce(message, str);
+        }
+            
+
+    });
 }
 
 void run_bot()
@@ -219,6 +259,13 @@ void cmd::end(int_fast64_t id)
         op::lock = true;
         op::user_ids.erase(found);
         op::lock = false;
+        std::ofstream of{op::user_db, std::ios::app};
+        if(!of.is_open())
+        {
+            op::log_sender->send_message(op::admin_id, "Couldnt delete id from file: " + std::to_string(id));
+            return;
+        }
+        of << (-1) << ' ' << id << ' ';
         op::op_sender->send_message(id, "Sorry, I wont bother you anymore.");
 
     }
@@ -226,13 +273,41 @@ void cmd::end(int_fast64_t id)
         
 }
 
+void cmd::help(int_fast64_t id)
+{
+    std::string help_message{};
+    help_message += "/start\t\t: starts notifications\n";
+    help_message += "/end\t\t: stops notifications\n";
+    help_message += "/resources\t: lists some resources\n";
+    help_message += "/help\t\t: *this";
+    op::op_sender->send_message(id, help_message);
+}
+
+void cmd::resources(int_fast64_t id)
+{
+    std::string resources{};
+    resources += "This bot fetches content from\nhttp://onepiece-tube.com\nfor manga chapters/anime episodes\n\n";
+    resources += "Other great Resources:\nhttps://thelibraryofohara.com/\nfor ChapterAnalysis, Timeline and tons of other informations.";
+    op::op_sender->send_message(id, resources);
+}
+
 void cmd::list_user()
 {
+    std::string message{};
     while(op::lock);
     op::lock = true;
     for(auto i : op::user_ids)
-        op::log_sender->send_message(op::admin_id, std::to_string(i));
+        message += std::to_string(i);
     op::lock = false;
+    op::op_sender->send_message(op::admin_id, message);
+
+}
+
+void cmd::announce(const telegram::types::message& message, std::string& full_message)
+{
+    std::string search{"/announce"};
+    auto found{full_message.find(search)};
+    fetch::notify(full_message.substr(found + search.length()));
 }
 
 bool fetch::check_for(const std::string& search, const std::string& url)
